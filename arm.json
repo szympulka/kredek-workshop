@@ -1,0 +1,141 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "uniqueString": {
+            "defaultValue": "workshop",
+            "type": "string",
+            "maxLength": 8,
+            "minLength": 2
+        }
+    },
+    "variables": {
+        "appInsName": "[concat('appins-',parameters('uniqueString'),'-weu-001d')]",
+        "hostingPlanNamefapp": "[concat('aspy-',parameters('uniqueString'),'-weu-001d')]",
+        "storageAccountName": "[concat('st',parameters('uniqueString'),'weu001d')]",
+        "fapp": "[concat('fapp-',parameters('uniqueString'),'-weu-001d')]",
+        "workspaceName": "[concat('wp-',parameters('uniqueString'),'-weu-001d')]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.OperationalInsights/workspaces",
+            "apiVersion": "2020-10-01",
+            "name": "[variables('workspaceName')]",
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "sku": {
+                    "name": "PerGB2018"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Insights/components",
+            "apiVersion": "2020-02-02-preview",
+            "name": "[variables('appInsName')]",
+            "location": "[resourceGroup().location]",
+            "kind": "web",
+            "properties": {
+                "Application_Type": "web",
+                "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', variables('workspaceName'))]"
+            },
+            "dependsOn": [
+                "[resourceId('Microsoft.OperationalInsights/workspaces', variables('workspaceName'))]"
+            ]
+        },
+        {
+            "apiVersion": "2018-11-01",
+            "name": "[variables('hostingPlanNamefapp')]",
+            "type": "Microsoft.Web/serverfarms",
+            "location": "[resourceGroup().location]",
+            "properties": {
+                "name": "[variables('hostingPlanNamefapp')]",
+                "computeMode": "Dynamic"
+            },
+            "sku": {
+                "name": "Y1",
+                "tier": "Dynamic"
+            }
+        },
+        {
+            "apiVersion": "2018-11-01",
+            "name": "[variables('fapp')]",
+            "type": "Microsoft.Web/sites",
+            "kind": "functionapp",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [
+                "[concat('Microsoft.Web/serverfarms/', variables('hostingPlanNamefapp'))]",
+                "[concat('Microsoft.Storage/storageAccounts/', variables('storageAccountName'))]",
+                "[concat('Microsoft.Insights/components/', variables('appInsName'))]"
+            ],
+            "properties": {
+                "siteConfig": {
+                    "numberOfWorkers": 1,
+                    "acrUseManagedIdentityCreds": false,
+                    "alwaysOn": false,
+                    "http20Enabled": false,
+                    "functionAppScaleLimit": 0,
+                    "minimumElasticInstanceCount": 0,
+                    "appSettings": [
+                        {
+                            "name": "FUNCTIONS_EXTENSION_VERSION",
+                            "value": "~4"
+                        },
+                        {
+                            "name": "FUNCTIONS_WORKER_RUNTIME",
+                            "value": "dotnet"
+                        },
+                        {
+                            "name": "AzureWebJobsStorage",
+                            "value": "[concat('DefaultEndpointsProtocol=https;AccountName=',variables('storageAccountName'),';AccountKey=',listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2019-06-01').keys[0].value,';EndpointSuffix=','core.windows.net')]"
+                        },
+                        {
+                            "name": "WEBSITE_CONTENTAZUREFILECONNECTIONSTRING",
+                            "value": "[concat('DefaultEndpointsProtocol=https;AccountName=',variables('storageAccountName'),';AccountKey=',listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), '2019-06-01').keys[0].value,';EndpointSuffix=','core.windows.net')]"
+                        },
+                        {
+                            "name": "APPINSIGHTS_INSTRUMENTATIONKEY",
+                            "value": "[reference(concat('microsoft.insights/components/',variables('appInsName')), '2020-02-02-preview').InstrumentationKey]"
+                        },
+                        {
+                            "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                            "value": "[reference(concat('microsoft.insights/components/',variables('appInsName')), '2020-02-02-preview').ConnectionString]"
+                        },
+                        {
+                            "name": "stConnetionString",
+                            "value": "[Concat('DefaultEndpointsProtocol=https;AccountName=',variables('storageAccountName'),';AccountKey=',listKeys(resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName')), providers('Microsoft.Storage', 'storageAccounts').apiVersions[0]).keys[0].value)]"
+                        }
+                    ]
+                },
+                "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', variables('hostingPlanNamefapp'))]",
+                "clientAffinityEnabled": true
+            }
+        },
+        {
+            "type": "Microsoft.Storage/storageAccounts",
+            "apiVersion": "2019-06-01",
+            "name": "[variables('storageAccountName')]",
+            "location": "[resourceGroup().location]",
+            "kind": "StorageV2",
+            "sku": {
+                "name": "Standard_LRS"
+            },
+            "properties": {
+                "supportsHttpsTrafficOnly": true,
+                "minimumTlsVersion": "TLS1_2"
+            },
+            "resources": [
+                {
+                    "name": "[concat(variables('storageAccountName'), '/default/queue')]",
+                    "type": "Microsoft.Storage/storageAccounts/queueServices/queues",
+                    "apiVersion": "2019-06-01",
+                    "dependsOn": [
+                        "[resourceId('Microsoft.Storage/storageAccounts', variables('storageAccountName'))]"
+                    ],
+                    "properties": {
+                        "metadata": {}
+                    }
+                }
+            ]
+        }
+    ]
+}
