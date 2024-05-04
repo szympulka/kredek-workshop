@@ -47,7 +47,7 @@
             "name": "[variables('hostingPlanNamefapp')]",
             "type": "Microsoft.Web/serverfarms",
             "location": "[resourceGroup().location]",
-            "kind": "functionapp,linux",
+            "kind": "linux",
             "properties": {
                 "name": "[variables('hostingPlanNamefapp')]",
                 "computeMode": "Dynamic"
